@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+	billingPortalRequest,
 	billingSyncRequest,
 	checkoutRequest,
 	createTodoRequest,
@@ -153,10 +154,22 @@ export default function App() {
 		setBusy(true);
 		setLoadError(null);
 		try {
-			const { checkoutUrl } = await checkoutRequest(plan);
-			window.location.href = checkoutUrl;
+			const { redirectStartUrl } = await checkoutRequest(plan);
+			window.location.href = redirectStartUrl;
 		} catch (e) {
 			setLoadError(e instanceof Error ? e.message : "Checkout failed");
+			setBusy(false);
+		}
+	};
+
+	const onManageBilling = async () => {
+		setBusy(true);
+		setLoadError(null);
+		try {
+			const { url } = await billingPortalRequest();
+			window.location.href = url;
+		} catch (e) {
+			setLoadError(e instanceof Error ? e.message : "Could not open billing portal");
 			setBusy(false);
 		}
 	};
@@ -214,6 +227,7 @@ export default function App() {
 			<PricingPage
 				user={user}
 				onSubscribe={onSubscribe}
+				onManageBilling={onManageBilling}
 				onBack={() => navigate("/")}
 				busy={busy}
 				error={loadError}
@@ -283,6 +297,7 @@ export default function App() {
 			todos={todos}
 			onLogout={handleLogout}
 			onNavigatePricing={() => navigate("/pricing")}
+			onManageBilling={onManageBilling}
 			onRefreshTodos={refreshTodos}
 			onRefreshUser={refreshUser}
 			loadError={loadError}
@@ -429,6 +444,7 @@ function RegisterForm(props: {
 function PricingPage(props: {
 	user: PublicUser;
 	onSubscribe: (plan: "basic" | "pro") => Promise<void>;
+	onManageBilling: () => Promise<void>;
 	onBack: () => void;
 	busy: boolean;
 	error: string | null;
@@ -452,6 +468,26 @@ function PricingPage(props: {
 						← Back to todos
 					</button>
 				</div>
+				{props.user.hasActiveSubscription ? (
+					<div className="flex items-center justify-between rounded-2xl border border-indigo-500/30 bg-indigo-500/5 px-5 py-4">
+						<div>
+							<p className="text-sm font-medium text-indigo-100">
+								You have an active subscription
+							</p>
+							<p className="text-xs text-slate-400 mt-0.5">
+								Update payment, cancel, or change billing details on the Kwit customer portal.
+							</p>
+						</div>
+						<button
+							type="button"
+							disabled={props.busy}
+							className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+							onClick={() => void props.onManageBilling()}
+						>
+							Manage billing
+						</button>
+					</div>
+				) : null}
 				{props.error ? <p className="text-red-400 text-sm">{props.error}</p> : null}
 				<div className="grid md:grid-cols-2 gap-6">
 					<div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6 space-y-4">
@@ -502,6 +538,7 @@ function TodoDashboard(props: {
 	todos: Todo[];
 	onLogout: () => Promise<void>;
 	onNavigatePricing: () => void;
+	onManageBilling: () => Promise<void>;
 	onRefreshTodos: () => Promise<void>;
 	onRefreshUser: () => Promise<void>;
 	loadError: string | null;
@@ -553,6 +590,16 @@ function TodoDashboard(props: {
 						>
 							Plans
 						</button>
+						{props.user.hasActiveSubscription ? (
+							<button
+								type="button"
+								disabled={props.busy}
+								className="rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 py-1.5 text-sm text-indigo-200 hover:bg-indigo-500/20 disabled:opacity-50"
+								onClick={() => void props.onManageBilling()}
+							>
+								Manage billing
+							</button>
+						) : null}
 						<button
 							type="button"
 							className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-400 hover:text-white"

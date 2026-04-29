@@ -275,10 +275,24 @@ async function handleCheckout(req: Request): Promise<Response> {
 		cancelUrl,
 		metadata: { appUserId: u.id, tier: plan },
 	});
+	console.log("result", result);
 
 	db.run("UPDATE users SET last_checkout_session_id = ? WHERE id = ?", [result.sessionId, u.id]);
 
-	return json({ checkoutUrl: result.checkoutUrl, sessionId: result.sessionId }, 200, req);
+	const redirectStartUrl =
+		"redirectStartUrl" in result && typeof result.redirectStartUrl === "string"
+			? result.redirectStartUrl
+			: result.checkoutUrl;
+
+	return json(
+		{
+			redirectStartUrl,
+			checkoutUrl: result.checkoutUrl,
+			sessionId: result.sessionId,
+		},
+		200,
+		req,
+	);
 }
 
 async function handleBillingSync(req: Request): Promise<Response> {
@@ -307,6 +321,39 @@ async function handleBillingSync(req: Request): Promise<Response> {
 	return json({ synced: true, user: publicUser(updated) }, 200, req);
 }
 
+async function handleBillingPortal(req: Request): Promise<Response> {
+	const user = requireUser(req);
+	if (!user) return json({ error: "Unauthorized." }, 401, req);
+
+	const kwit = getKwit();
+	if (!kwit) {
+		return json({ error: "Server missing KWIT_API_KEY — cannot open portal." }, 503, req);
+	}
+
+	if (!user.kwit_customer_id) {
+		return json(
+			{ error: "No Kwit customer on file yet. Subscribe to a plan first." },
+			400,
+			req,
+		);
+	}
+
+	const portal = await kwit.portal.sessions.create({
+		customerId: user.kwit_customer_id,
+		returnUrl: `${config.publicAppUrl}/`,
+	});
+
+	return json(
+		{
+			url: portal.url,
+			expiresAt: portal.expiresAt,
+			sessionId: portal.sessionId,
+		},
+		200,
+		req,
+	);
+}
+
 async function handleKwitWebhook(req: Request): Promise<Response> {
 	const secret = config.kwitWebhookSecret;
 	if (!secret) {
@@ -327,9 +374,8 @@ async function handleKwitWebhook(req: Request): Promise<Response> {
 		return new Response("Invalid signature", { status: 400 });
 	}
 
-	const flatPayload = flattenWebhookPayload(verified.payload);
-
-	const type = verified.type as WebhookEventType;
+	const { payload, type } = verified;
+	const flatPayload = flattenWebhookPayload(payload);
 
 	if (type === "subscription.canceled") {
 		const p = asSubscriptionCanceledPayload(flatPayload);
@@ -420,6 +466,9 @@ async function handleRequest(req: Request): Promise<Response> {
 		}
 		if (path === "/api/billing/sync" && req.method === "POST") {
 			return handleBillingSync(req);
+		}
+		if (path === "/api/billing/portal" && req.method === "POST") {
+			return handleBillingPortal(req);
 		}
 		if (path === "/api/webhooks/kwit" && req.method === "POST") {
 			return handleKwitWebhook(req);

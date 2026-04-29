@@ -118,6 +118,7 @@ export async function deleteTodoRequest(id: string): Promise<void> {
 }
 
 export async function checkoutRequest(plan: "basic" | "pro"): Promise<{
+	redirectStartUrl: string;
 	checkoutUrl: string;
 	sessionId: string;
 }> {
@@ -134,4 +135,12 @@ export async function billingSyncRequest(): Promise<{
 	message?: string;
 }> {
 	return apiFetch("/api/billing/sync", { method: "POST", body: "{}" });
+}
+
+export async function billingPortalRequest(): Promise<{
+	url: string;
+	expiresAt: string;
+	sessionId: string;
+}> {
+	return apiFetch("/api/billing/portal", { method: "POST", body: "{}" });
 }
